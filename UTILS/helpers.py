@@ -256,3 +256,33 @@ def nearest_label_join_1d(
 
 
 
+# ------ SAMoSA-specific helpers ------
+
+def _collect_samosa_files(raw_dir: Path) -> List[Path]:
+    files = sorted(raw_dir.glob("*.pkl")) or sorted(raw_dir.rglob("*.pkl"))
+    print(f"[SAMoSA] Found {len(files)} pickle files under {raw_dir}")
+    return files
+
+
+def _estimate_hz_from_index(n_rows: int, assumed_hz: float = 50.0) -> float:
+    # With synthetic equally spaced timestamps, report the assumed rate.
+    return float(assumed_hz) if n_rows >= 3 else np.nan
+
+
+def _apply_axis_map(vec: np.ndarray,
+                    ch_names: list[str],
+                    mapping: Dict[str, str]) -> np.ndarray:
+    """
+    Generic axis-mapping helper.
+
+    mapping: {out_name: src_name or '-src_name'}
+    ch_names: list of canonical names for vec columns, e.g. ["acc_x","acc_y","acc_z"]
+    """
+    name2idx = {n: i for i, n in enumerate(ch_names)}
+    out = np.zeros_like(vec)
+    for out_name, expr in mapping.items():
+        sign, src = (-1.0, expr[1:]) if expr.startswith("-") else (1.0, expr)
+        out_idx = name2idx[out_name]
+        src_idx = name2idx[src]
+        out[:, out_idx] = sign * vec[:, src_idx]
+    return out
