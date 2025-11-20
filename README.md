@@ -91,6 +91,13 @@ pip install -r requirements.txt
 
 ## 🚀 Usage
 
+Step 0
+
+Please download the datasets from the following links and replace the `data/raw_data` directory:
+
+- [Google Drive link for combined datasets](https://drive.google.com/file/d/1FPCCkhvsx0ub7QlsTLaoRtdBFFoP1FwW/view?usp=sharings)
+
+
 Step 1 — Dataset preprocessing
 
 Run each notebook under `Individual_dataloaders/` to:
