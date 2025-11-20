@@ -110,13 +110,7 @@ Step 2 — Schema unification
 
 In `Unification/merge_pipeline.ipynb`:
 
-- Validate each dataset against `schemas/main_schema.json`
-- Apply the global `schemas/activity_mapping.json` to harmonize activity labels
 - Merge all datasets into `data/merged_dataset/unified_dataset.parquet`
-
-Step 3 — Model integration
-
-The unified dataset can be used directly by IMU foundation-model pipelines (e.g., transformer-based pretraining, contrastive learning, or self-supervised sequence models).
 
 ## 🧱 Repository Structure
 
