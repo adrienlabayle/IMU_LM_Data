@@ -304,6 +304,21 @@
     "knife_cheese": 15,
     "knife_salami": 15,
     "lazychair": 13,
-    "unknown": 9000
+    "unknown": 9000,
+    "7030 sleeping": 1,
+  "carrying heavy loads": 7,
+  "home activity": 13,
+  "household-chores": 13,
+  "household chores": 13,
+  "leisure": 1,
+  "manual-work": 13,
+  "manual work": 13,
+  "mixed-activity": 19,
+  "mixed activity": 19,
+  "occupation": 13,
+  "sports/gym": 9,
+  "sports_gym": 9,
+  "sports & gym": 9,
+  "transportation": 1
   }
 }
