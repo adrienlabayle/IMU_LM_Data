@@ -286,3 +286,60 @@ def _apply_axis_map(vec: np.ndarray,
         src_idx = name2idx[src]
         out[:, out_idx] = sign * vec[:, src_idx]
     return out
+
+
+# pmap-specific helpers
+
+def _split_on_gaps_seconds(df_in: pd.DataFrame, ts_col: str, cutoff_s: float) -> list[pd.DataFrame]:
+    if df_in.empty:
+        return []
+    ts = df_in[ts_col].to_numpy(dtype=np.float64)
+    dt = np.diff(ts)
+    cut = np.where(dt > float(cutoff_s))[0] + 1
+    bounds = np.concatenate(([0], cut, [len(df_in)]))
+    out = []
+    for k in range(len(bounds) - 1):
+        a = int(bounds[k])
+        b = int(bounds[k + 1])
+        seg = df_in.iloc[a:b].copy()
+        if len(seg) > 0:
+            out.append(seg)
+    return out
+
+
+def _resample_segment_to_grid_50hz(
+    seg: pd.DataFrame,
+    ts_col: str,
+    sensor_cols: list[str],
+    label_cols: list[str],
+    target_hz: float = 50.0,
+) -> pd.DataFrame:
+    dt = 1.0 / float(target_hz)
+    t0 = float(seg[ts_col].iloc[0])
+    t1 = float(seg[ts_col].iloc[-1])
+    if not np.isfinite(t0) or not np.isfinite(t1) or t1 <= t0:
+        return pd.DataFrame()
+
+    grid = np.arange(t0, t1 + 1e-12, dt, dtype=np.float64)
+    if grid.size < 2:
+        return pd.DataFrame()
+
+    out = pd.DataFrame({ts_col: grid})
+
+    x = seg[ts_col].to_numpy(dtype=np.float64)
+    for c in sensor_cols:
+        y = seg[c].to_numpy(dtype=np.float64)
+        m = np.isfinite(x) & np.isfinite(y)
+        if m.sum() < 2:
+            out[c] = np.nan
+        else:
+            out[c] = np.interp(grid, x[m], y[m]).astype(np.float32)
+
+    seg_lab = seg[[ts_col] + label_cols].copy()
+    seg_lab = seg_lab.sort_values(ts_col)
+    out = pd.merge_asof(out, seg_lab, on=ts_col, direction="nearest", tolerance=dt * 0.51)
+
+    out = out.dropna(subset=sensor_cols, how="any")
+    out = out.dropna(subset=label_cols, how="any")
+
+    return out.reset_index(drop=True)
