@@ -32,6 +32,17 @@
   ],
 
   "mapping": {
+    "bike": 5,
+    "jog": 3,
+    "upstairs": 4,
+    "downstairs": 4,
+    "type": 14,
+    "write": 14,
+    "coffee": 15,
+    "eat": 15,
+    "drink": 15,
+    "talk": 14,
+    "smoke": 9000,
     "makecoffee": 15,
     "maketea": 15,
     "makecereal": 15,
