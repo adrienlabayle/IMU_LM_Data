@@ -32,6 +32,14 @@
   ],
 
   "mapping": {
+    "makecoffee": 15,
+    "maketea": 15,
+    "makecereal": 15,
+    "makesandwich": 15,
+    "latte_making": 15,
+    "cooking": 15,
+    "skin_care": 19,
+    "makestencil": 14,
     "typing": 14,
     "brushing_teeth": 19,
     "eating_soup": 15,
