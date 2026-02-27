@@ -48,68 +48,207 @@ def convert_unit(
 ) -> np.ndarray:
     """
     Convert IMU units:
-    - 'acc': g → m/s² (× 9.8 to match your request)
+    - 'acc': g → m/s² (× 9.80665)
     - 'gyro': deg/s → rad/s
     """
     if kind == "acc":
-        return arr * 9.8
+        return arr * 9.80665
     if kind == "gyro":
         return arr * (np.pi / 180.0)
     return arr
 
-def normalize_str(s: str) -> str:
-    """Normalize arbitrary strings into snake_case alphanumerics."""
-    s = s.strip()
-    s = re.sub(r"(?<!^)(?=[A-Z])", "_", s)   # camelCase → snake_case
-    s = re.sub(r"[\s\-]+", "_", s)           # spaces & hyphens → underscore
-    s = re.sub(r"[^\w]", "", s)              # drop non-word chars
-    return s.lower()
-
-def norm_label(s: str) -> str:
-    """Normalize labels consistently for BOTH raw data and mapping keys."""
-    x = normalize_str(str(s))              # your existing helper
-    x = re.sub(r'[_\s]+', '_', x)         # collapse multiple underscores/spaces -> single _
-    x = x.strip('_')                       # trim leading/trailing _
-    return x
-
-def keyize(s: str) -> str:
-    # trim, collapse internal whitespace, lowercase
-    return " ".join(str(s).strip().split()).lower()
-
-def _keyize(s: str) -> str:
-    s = str(s)
-    s = s.replace("\u00A0", " ")      # NBSP → space
-    s = s.replace("\u2011", "-")      # non-breaking hyphen → hyphen
-    s = s.strip().lower()
-    s = s.replace("-", " ")           # hyphens → spaces
-    s = re.sub(r"\s+", " ", s)        # collapse spaces
-    return s
-
-## oppportunity-specific helpers
-
 def _canon(s):
+    """Normalize any string to lowercase snake_case alphanumerics. THE canonical normalizer."""
     if pd.isna(s): return ""
     s = str(s).strip().lower()
     s = re.sub(r"[^a-z0-9]+", "_", s)
     return s.strip("_")
 
 
-# def _canon_object(name: str) -> str:
-#     s = normalize_str(name)
-#     s = s.replace("door1", "door").replace("door2", "door")
-#     s = s.replace("drawer1", "drawer").replace("drawer2", "drawer").replace("drawer3", "drawer")
-#     s = s.replace("knife_cheese", "knife").replace("knife_salami", "knife")
-#     s = s.replace("lazychair", "chair")
-#     return s
+# ===== Shared pipeline boilerplate (Step 0 / 3 / 4) =====
 
-# def make_verb_object(verb: str, obj: str) -> str:
-#     v = normalize_str(verb)
-#     o = _canon_object(obj)
-#     if v == "drink" and o == "cup":
-#         return "drink_from_cup"
-#     if v == "sip" and o == "cup":
-#         return "sip_cup"
-#     return f"{v}_{o}"
+def load_contracts(root: Path) -> dict:
+    """
+    Load schema + activity mapping from Unification/schemas/.
+    Returns dict with keys: SCHEMA, ACT_MAP_FULL, UNKNOWN_ID, TARGET_HZ,
+                             RAW2ID, ID2NAME, CLEANED, MERGED.
+    """
+    schema_path  = root / "Unification" / "schemas" / "continuous_stream_schema.json"
+    act_map_path = root / "Unification" / "schemas" / "activity_mapping.json"
+
+    schema  = json.loads(schema_path.read_text())
+    act_map = json.loads(act_map_path.read_text())
+
+    unknown_id = int(act_map.get("unknown_activity_id", 9000))
+    target_hz  = int(schema.get("rate_hz", 50))
+    raw2id  = {_canon(k): int(v) for k, v in act_map.get("mapping", {}).items()}
+    id2name = {int(x["id"]): x["name"] for x in act_map["label_set"]}
+
+    return {
+        "SCHEMA":       schema,
+        "ACT_MAP_FULL": act_map,
+        "UNKNOWN_ID":   unknown_id,
+        "TARGET_HZ":    target_hz,
+        "RAW2ID":       raw2id,
+        "ID2NAME":      id2name,
+        "CLEANED":      root / "data" / "cleaned_premerge",
+        "MERGED":       root / "data" / "merged_dataset",
+    }
+
+
+def to_continuous_stream(
+    df_native: pd.DataFrame,
+    schema: dict,
+    raw2id: dict,
+    id2name: dict,
+    unknown_id: int,
+) -> pd.DataFrame:
+    """
+    Generic Step 3: map native labels → global, enforce dtypes, reorder to schema.
+    Expects df_native to have: dataset, subject_id, session_id, timestamp_ns,
+    acc_x/y/z, optionally gyro_x/y/z, dataset_activity_id, dataset_activity_label.
+    """
+    if df_native.empty:
+        return pd.DataFrame(columns=[c["name"] for c in schema["columns"]])
+
+    raw_key = df_native["dataset_activity_label"].astype("string").map(_canon)
+    gid     = raw_key.map(raw2id).fillna(unknown_id).astype("int16")
+    glabel  = gid.map(lambda x: id2name.get(int(x), "other")).astype("string")
+
+    has_gyro = "gyro_x" in df_native.columns
+
+    out = pd.DataFrame({
+        "dataset":                df_native["dataset"].astype("string"),
+        "subject_id":             df_native["subject_id"].astype("string"),
+        "session_id":             df_native["session_id"].astype("string"),
+        "timestamp_ns":           df_native["timestamp_ns"].astype("int64"),
+        "acc_x":                  df_native["acc_x"].astype("float32"),
+        "acc_y":                  df_native["acc_y"].astype("float32"),
+        "acc_z":                  df_native["acc_z"].astype("float32"),
+        "gyro_x":                 df_native["gyro_x"].astype("float32") if has_gyro else np.float32(np.nan),
+        "gyro_y":                 df_native["gyro_y"].astype("float32") if has_gyro else np.float32(np.nan),
+        "gyro_z":                 df_native["gyro_z"].astype("float32") if has_gyro else np.float32(np.nan),
+        "global_activity_id":     gid,
+        "global_activity_label":  glabel,
+        "dataset_activity_id":    df_native["dataset_activity_id"].astype("int16"),
+        "dataset_activity_label": df_native["dataset_activity_label"].astype("string"),
+    })
+
+    order = [c["name"] for c in schema["columns"]]
+    return out[order]
+
+
+def est_hz_ns(ts_ns: pd.Series) -> float:
+    """Estimate sampling rate from nanosecond timestamps."""
+    arr = ts_ns.to_numpy()
+    if arr.size < 3:
+        return np.nan
+    dt = np.diff(arr) / 1e9
+    dt = dt[(dt > 0) & np.isfinite(dt)]
+    return float(np.median(1.0 / dt)) if dt.size else np.nan
+
+
+def run_qa_checks(df: pd.DataFrame, schema: dict, unknown_id: int) -> None:
+    """Standard Step 4 QA: monotonicity, Hz, not-null, mapping coverage, label dist."""
+    groups = ["subject_id", "session_id"]
+
+    print("Subjects:", df["subject_id"].nunique(),
+          "| Sessions:", df["session_id"].nunique())
+
+    # Monotonic timestamps per group
+    viol = 0
+    for _, g in df.groupby(groups, sort=False):
+        ts = g["timestamp_ns"].to_numpy()
+        if ts.size and not np.all(np.diff(ts) >= 0):
+            viol += 1
+    print("Monotonic violations (groups):", viol)
+
+    # Hz estimation
+    hz = df.groupby(groups)["timestamp_ns"].apply(est_hz_ns)
+    print(f"Median Hz: {np.nanmedian(hz.values):.2f} (target={schema['rate_hz']})")
+
+    # Required-not-null
+    req = schema["expectations"]["required_not_null"]
+    pct = df[req].notnull().all(axis=1).mean() * 100
+    print(f"Rows meeting required-not-null: {pct:.2f}%")
+
+    # Global mapping coverage
+    cov = (df["global_activity_id"] != unknown_id).mean() * 100
+    print(f"Global mapping coverage: {cov:.1f}% (unknown={unknown_id})")
+
+    print("\nTop-15 dataset_activity_label:")
+    print(df["dataset_activity_label"].value_counts().head(15))
+    print("\nTop-15 global labels:")
+    print(df["global_activity_label"].value_counts().head(15))
+
+def check_sample_integrity(
+    df: pd.DataFrame,
+    schema: dict,
+    min_samples: int = 128,
+) -> None:
+    """
+    Step 4b: verify that every contiguous run of a single
+    (subject_id, session_id, dataset_activity_label) has:
+      1. Monotonically non-decreasing timestamps
+      2. Consistent step size (~20 ms for 50 Hz)
+      3. At least `min_samples` consecutive rows
+
+    Prints a summary and flags violations.
+    """
+    target_hz = int(schema.get("rate_hz", 50))
+    expected_dt_ns = int(1e9 // target_hz)          # 20_000_000
+    tol_ns = expected_dt_ns // 2                     # 10 ms tolerance
+
+    groups = ["subject_id", "session_id"]
+    total_runs = 0
+    short_runs = 0
+    mono_violations = 0
+    dt_violations = 0
+    short_details: list[tuple] = []                  # (subj, sess, label, run_len)
+
+    for (sid, sess), g in df.groupby(groups, sort=False):
+        labels = g["dataset_activity_label"].to_numpy(dtype=str)
+        ts = g["timestamp_ns"].to_numpy(dtype=np.int64)
+
+        # detect contiguous run boundaries (label changes)
+        change = np.concatenate(([True], labels[1:] != labels[:-1]))
+        run_ids = np.cumsum(change)
+
+        for rid in range(1, run_ids[-1] + 1):
+            mask = run_ids == rid
+            run_ts = ts[mask]
+            run_label = labels[mask][0]
+            run_len = int(mask.sum())
+            total_runs += 1
+
+            # 1. monotonic
+            diffs = np.diff(run_ts)
+            if diffs.size and not np.all(diffs >= 0):
+                mono_violations += 1
+
+            # 2. consistent dt (only check positive diffs)
+            pos = diffs[diffs > 0]
+            if pos.size:
+                med_dt = int(np.median(pos))
+                if abs(med_dt - expected_dt_ns) > tol_ns:
+                    dt_violations += 1
+
+            # 3. min length
+            if run_len < min_samples:
+                short_runs += 1
+                if len(short_details) < 20:          # cap detail output
+                    short_details.append((sid, sess, run_label, run_len))
+
+    print(f"\n=== Sample Integrity Check (min_samples={min_samples}) ===")
+    print(f"Total contiguous runs: {total_runs:,}")
+    print(f"Monotonic violations:  {mono_violations}")
+    print(f"dt-step violations:    {dt_violations}  (expected {expected_dt_ns/1e6:.0f} ms ± {tol_ns/1e6:.0f} ms)")
+    print(f"Short runs (<{min_samples} rows): {short_runs}  ({100*short_runs/max(total_runs,1):.1f}%)")
+    if short_details:
+        print(f"\nFirst {len(short_details)} short runs:")
+        for sid, sess, lbl, n in short_details:
+            print(f"  {sid} | {sess} | {lbl:30s} | {n} rows")
+
 
 def upsample_df_rate(df: pd.DataFrame, tcol: str, num_cols, src_hz: float, dst_hz: int) -> pd.DataFrame:
     """
