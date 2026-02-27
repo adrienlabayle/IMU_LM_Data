@@ -351,6 +351,28 @@
     "sports/gym": 9,
     "sports_gym": 9,
     "sports & gym": 9,
-    "transportation": 1
+    "transportation": 1,
+
+    "swipe_left": 18,
+    "swipe_right": 18,
+    "wave": 18,
+    "clap": 18,
+    "throw": 21,
+    "arm_cross": 18,
+    "basketball_shoot": 21,
+    "draw_x": 18,
+    "draw_circle_cw": 18,
+    "draw_circle_ccw": 18,
+    "draw_triangle": 18,
+    "bowling": 21,
+    "boxing": 21,
+    "baseball_swing": 21,
+    "tennis_swing": 21,
+    "arm_curl": 6,
+    "tennis_serve": 21,
+    "push": 6,
+    "knock": 18,
+    "catch": 21,
+    "pickup_and_throw": 21
   }
 }
