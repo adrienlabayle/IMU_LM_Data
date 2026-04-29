@@ -97,6 +97,14 @@ Please download the datasets from the following links and replace the `data/raw_
 
 - [Google Drive link for combined datasets](https://drive.google.com/file/d/1FPCCkhvsx0ub7QlsTLaoRtdBFFoP1FwW/view?usp=sharings)
 
+- The three other datasetes that we use : 
+wisdm :
+https://archive.ics.uci.edu/dataset/507/wisdm+smartphone+and+smartwatch+activity+and+biometrics+dataset
+capture24 :
+https://ora.ox.ac.uk/objects/uuid:99d7c092-d865-4a19-b096-cc16440cd001
+samosa :
+https://github.com/cmusmashlab/SAMoSA
+
 
 Step 1 — Dataset preprocessing
 
