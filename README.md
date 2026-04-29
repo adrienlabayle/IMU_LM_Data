@@ -119,6 +119,7 @@ Step 2 — Schema unification
 In `Unification/merge_pipeline.ipynb`:
 
 - Merge all datasets into `data/merged_dataset/unified_dataset.parquet`
+- We are currently using the last two blocks of the notebook because we didn't find anything about the postprocess notebook so we are currently dealing with the clean data and not the postporecessing clean data
 
 ## 🧱 Repository Structure
 
